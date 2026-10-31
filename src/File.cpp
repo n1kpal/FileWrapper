@@ -80,10 +80,14 @@ void File::write_all(std::span<const std::byte> data) {
 
 std::string File::read_all() const {
     std::string res = "";
+    LARGE_INTEGER start{};
+    SetFilePointerEx(this->h_, LARGE_INTEGER(0), &start, FILE_BEGIN);
+
     while (true) {
         DWORD cur = 0;
-        if (!ReadFile(this->h_, &(res[0]), MAXDWORD, &cur, nullptr)); {
-            SetFilePointerEx(this->h_, LARGE_INTEGER(0), nullptr, FILE_BEGIN);
+        res += std::string(MAXDWORD, ' ');
+        if (!ReadFile(this->h_, &res, MAXDWORD, &cur, nullptr)) {
+
         }
     }
 }
