@@ -2,6 +2,8 @@
 #include <windows.h>
 #include <algorithm>
 
+#define CHUNK 0xffff
+#define throw_error(err) throw std::system_error(static_cast<int>(err), std::system_category())
 
 std::expected<File, std::error_code> File::try_open(const std::filesystem::path& p, DWORD access, DWORD creation) noexcept {
     HANDLE handle = CreateFileW(p.c_str(), access, 0, nullptr, creation, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -81,13 +83,55 @@ void File::write_all(std::span<const std::byte> data) {
 std::string File::read_all() const {
     std::string res = "";
     LARGE_INTEGER start{};
-    SetFilePointerEx(this->h_, LARGE_INTEGER(0), &start, FILE_BEGIN);
-
-    while (true) {
-        DWORD cur = 0;
-        res += std::string(MAXDWORD, ' ');
-        if (!ReadFile(this->h_, &res, MAXDWORD, &cur, nullptr)) {
-
-        }
+    LARGE_INTEGER zero{};
+    zero.QuadPart = 0;
+    if (!SetFilePointerEx(this->h_, zero, &start, FILE_CURRENT)) {
+        throw_error(GetLastError());
     }
+
+    DWORD cur;
+    do {
+        cur = 0;
+        try {
+            res.append(CHUNK, ' ');
+        } catch (...) {
+            SetFilePointerEx(this->h_, start, nullptr, FILE_BEGIN);
+            throw;
+        }
+        
+        if (!ReadFile(this->h_, &(res[res.size() - CHUNK]), CHUNK, &cur, nullptr)) {
+            DWORD err = GetLastError();
+            SetFilePointerEx(this->h_, start, nullptr, FILE_BEGIN);
+            throw_error(err);
+        }
+
+        res.erase(res.size() - CHUNK + cur);
+    } while (cur != 0);
+
+    SetFilePointerEx(this->h_, start, nullptr, FILE_BEGIN);
+    return res;
+}
+
+void File::close() {
+    if (!this->is_open()) {
+        return;
+    }
+
+    HANDLE h = this->h_;
+    h_ = INVALID_HANDLE_VALUE;
+
+    if (!CloseHandle(h)) {
+        throw_error(GetLastError());
+    }
+}
+
+File::~File() {
+    if (this->is_open()) {
+        CloseHandle(this->h_);
+    }
+}
+
+void File::reopen(const std::filesystem::path& p, DWORD access) {
+    File f(open(p, access, OPEN_EXISTING));
+    this->swap(f);
 }

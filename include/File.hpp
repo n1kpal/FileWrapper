@@ -26,7 +26,8 @@ class File {
     void reopen(const std::filesystem::path& p, DWORD access);
     void close();   // Явное закрытие с проверкой ошибки
 
+    ~File();
   private:
     HANDLE h_ = INVALID_HANDLE_VALUE;
-    File(HANDLE) noexcept;
+    File(HANDLE h) noexcept : h_(h) {}
 };
